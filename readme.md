@@ -6,7 +6,7 @@ This document provides a step-by-step approach for deploying the [OPC UA publish
 
 ## Create an IoT Edge Device
 
-### Register a new IoT Edge device in IoT Hub.  
+### Register a new IoT Edge device in IoT Hub
 
 This can be done via the Azure Portal, or via the commandline, by executing this CLI command:
 
@@ -145,19 +145,19 @@ The containerCreate options of the OPCPublisher module state:
 {
   "HostConfig": {
     "Binds": [
-      "/iiotedge:/appdata"
+      "/etc/iiotedge:/appdata"
     ]
   },
   "Hostname": "opcpublisher",
   "Cmd": [
-    "--pf=./publishednodes.json",
+    "--pf=/appdata/publishednodes.json",
     "--aa"
   ]
 }
 ```
 
 The configuration file must be named `publishednodes.json` and must exist in the `/appdata` folder that exists inside the container.
-The `/iiotedge` folder which should exist on the Host (The VM that runs iotedge) is mounted to the `/appdata` folder in the container.
+The `/etc/iiotedge` folder which should exist on the Host (The VM that runs iotedge) is mounted to the `/appdata` folder in the container.
 
 ### Configuration
 
@@ -166,7 +166,7 @@ The `publishednodes.json` should look like this:
 ```json
 [
   {
-    "EndpointUrl": "opc.tcp://aci-bekaert-g4mwza6-plc1.westeurope.azurecontainer.io:50000",
+    "EndpointUrl": "opc.tcp://aci-contoso-g4mwza6-plc1.westeurope.azurecontainer.io:50000",
     "UseSecurity": false,
     "OpcNodes": [
       { "Id": "ns=2;s=AlternatingBoolean" },
@@ -182,5 +182,60 @@ The `publishednodes.json` should look like this:
 ]
 ```
 
+(The contents that can be used for the configuration file can be found in the logs of the OPC UA Simulator)
+
 The `EndpointUrl` can be found in the logs of the OPC UA Server Simulator that is running in the Azure Container Instance that has been deployed.
 Actually, the complete JSON of how this file should look like, can be found in the logs of the OPC UA Server Simulator.
+
+## Get Telemetry information into a Timeseries database
+
+Now that we have the OPCPublisher IoT Edge module up and running, and it is extracting telemetry from an OPC UA simulator, the next step is to get that information into a Timeseries database.
+For the sake of simplicity, we'll use Timeseries Insights, but Azure Data Explorer can be used as well.
+
+### Configure OPCPublisher to specify the message-format that must be used
+
+The OPCPublisher can be configured via commandline options.  Documentation can be found [here](https://github.com/Azure/iot-edge-opc-publisher/blob/main/docs/CommandLineArguments.md).
+
+#### Use the standardized OPC UA JSON format
+
+To use the standardized OPC UA format, specify these commandline arguments:
+
+- `--me=Json`
+- `--mm=PubSub`
+
+#### Use the simplified TSI compatible JSON format
+
+- `--me=Json`
+- `--mm=Samples`
+
+### Setup a Timeseries Insights database
+
+- Define a consumer-group on the IoT Hub or EventHub that receives the messages published by IoT Edge
+- Add a Timeseries Insights resource in Azure
+- Specify `NodeId` as the property-name for the Timeseries ID.  `NodeId` is the name of the property in the messages sent by OPCPublisher that identifies a metric:
+
+  ```json
+  [
+    {
+        "NodeId": "http://microsoft.com/Opc/OpcPlc/#s=AlternatingBoolean",
+        "ApplicationUri": "urn:OpcPlc:aci-contoso-g4mwza6-plc1",
+        "Value": {
+            "Value": true,
+            "SourceTimestamp": "2021-07-16T07:21:13.316076Z"
+        }
+    }
+  ]
+  ```
+
+  Note: it is also possible to specify more (up to 3) property-names.  If `ApplicationUri` + `NodeId` uniquely identifies a tag, this combination should be used.
+
+  Important: pay attention that the correct casing is used, as a case-sensitive search will be performed.
+
+- Setup an EventSource:  this will make sure that data that is delivered on an EventHub or IoT Hub is ingested into Time Series Insights.
+  Make sure that the consumer-group that has been created in the first step is used.
+- Finally, the property-name for the timestamp must be specified.  Specify `Value.SourceTimestamp`.  (Pay attention to the casing!)
+
+After a few moments, data should be flowing in in Timeseries Insights.  
+Navigate to `https://insights.timeseries.azure.com`, and visualize the data:
+
+![TSI graph](./media/tsi_data.png)

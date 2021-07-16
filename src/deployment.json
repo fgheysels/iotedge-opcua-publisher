@@ -6,7 +6,7 @@
                     "OPCPublisher": {
                         "settings": {
                             "image": "mcr.microsoft.com/iotedge/opc-publisher:latest",
-                            "createOptions": "{\"Hostname\":\"opcpublisher\",\"Cmd\":[\"--pf=./publishednodes.json\",\"--aa\"],\"HostConfig\":{\"Binds\":[\"/etc/iiotedge:/appdata\"]}}"
+                            "createOptions": "{\"Hostname\":\"opcpublisher\",\"Cmd\":[\"--pf=/appdata/publishednodes.json\",\"--aa\",\"--me=Json\",\"--mm=Samples\"],\"HostConfig\":{\"Binds\":[\"/etc/iiotedge:/appdata\"]}}"
                         },
                         "type": "docker",
                         "version": "1.0",
