@@ -105,31 +105,31 @@ This repository contains a file `deployment.json`.  This file is a deployment ma
 
 Execute this command to deploy the modules to the edge device:
 
-```
+```powershell
 $deploymentName = "opcua_$(Get-Date -Format yyyyMMdd)"
 
 az iot edge deployment create -d $deploymentName --content .\deployment.json -l "<iothubconnectionstring>" --target-condition "tags.opcua = true"
 ```
 
-Note that the target-condition works on the `tags` property.  This makes sure that only devices that have this specific tag are targetted by the deployment.
+Note that the `target-condition` works on the `tags` property.  This makes sure that only devices that have this specific tag are targetted by the deployment.
 
-After a few moments, you'd see that the deployment targets the device that has been registered and the deployment should be applied to that device.
+After a few moments, you'll see in IoT Hub that the deployment targets the device that has been registered and the deployment should be applied to that device.
 
 When executing this command on the VM that runs IoT Edge:
 
-```
+```bash
 iotedge list
 ```
 
-You should see that IoT edge is running:
- - edgeHub 1.2
- - edgeAgent 1.2
- - OPCPublisher
+You should see that IoT edge is running these modules:
 
+- edgeHub 1.2
+- edgeAgent 1.2
+- OPCPublisher
 
 Now, the IoT Edge device is able to listen to OPC UA events.
 
-## Setup a Mock which simulates an OPC UA server which simulates OPC UA data being sent
+## Setup a Mock which simulates an OPC UA server that exposes telemetry via OPC UA
 
 There exists a GitHub repository which contains a OPC UA Server simulator.  It can be found [here](https://github.com/Azure-Samples/iot-edge-opc-plc).
 Deploying it is just a matter of clicking the 'Deploy to Azure' button.
@@ -139,7 +139,7 @@ Deploying it is just a matter of clicking the 'Deploy to Azure' button.
 The OPCPublisher module is currently not receiving any data since it is not configured yet.
 Moreover, if the command `iotedge logs OPCPublisher` is executed, you can see that the module is not functioning correctly:  there is no configuration file available.
 
-The containerCreate options of the OPCPublisher module state:
+The `containerCreate` options of the OPCPublisher module state:
 
 ```json
 {
@@ -182,10 +182,22 @@ The `publishednodes.json` should look like this:
 ]
 ```
 
-(The contents that can be used for the configuration file can be found in the logs of the OPC UA Simulator)
-
 The `EndpointUrl` can be found in the logs of the OPC UA Server Simulator that is running in the Azure Container Instance that has been deployed.
 Actually, the complete JSON of how this file should look like, can be found in the logs of the OPC UA Server Simulator.
+
+### Verification
+
+Once the configuration file is created, check if everything is working as expected.
+
+On the IoT Edge VM, look at the logs of the OPCPublisher module:
+
+```bash
+iotedge logs OPCPublisher
+```
+
+If everything works well, you should see that the module emits diagnostics regarding the telemetry that it has collected.
+
+In IoT Hub, you should also see that messages are being received.
 
 ## Get Telemetry information into a Timeseries database
 
