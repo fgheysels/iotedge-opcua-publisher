@@ -25,11 +25,12 @@ First, a ssh keyset must be generated which will be used to get remote access to
 
 Execute this command:
 
-```powershell
+```bash
 ssh-keygen -m PEM -t rsa -b 4096 -f opcua_iotedge_vm.pem
 ```
 
 This commands generates 2 files:
+
 - opcua_iotedge_vm.pem:  the private key that should be stored in a secured location
 - opcua_iotedge_vm.pub: the public key for this keyset.
 
