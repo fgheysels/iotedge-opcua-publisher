@@ -44,7 +44,7 @@
         "$edgeHub": {
             "properties.desired": {
                 "routes": {
-                    "route": "FROM /messages/* INTO $upstream"
+                    "route": "FROM /messages/modules/opcpublisher/* INTO $upstream"
                 },
                 "schemaVersion": "1.1",
                 "storeAndForwardConfiguration": {
