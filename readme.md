@@ -4,6 +4,16 @@
 
 This document provides a step-by-step approach for deploying the [OPC UA publisher IoT Edge module](https://github.com/Azure/iot-edge-opc-publisher) on an IoT Edge device.
 
+## Deploy the required Azure Resources
+
+Deploy the ARM template that is found in .\src\arm
+
+This can be done via the Azure Portal (Deploy a custom Template) or via the following command:
+
+```powershell
+az deployment group create --resource-group <resource-group-name> --template-file opcua_poc_resources.json
+```
+
 ## Create an IoT Edge Device
 
 ### Register a new IoT Edge device in IoT Hub
@@ -13,6 +23,21 @@ This can be done via the Azure Portal, or via the commandline, by executing this
 ```azcli
 az iot hub device-identity create --device-id <my_device_id> --edge-enabled --hub-name <iothubname>
 ```
+
+When the device has been created, edit the Device Twin and add these tags:
+
+- Navigate to the IoT Edge blade of your IoT Hub in the Azure Portal
+- Select the IoT Edge device that is used in this PoC which will host the OPC UA publisher
+- Open the Device Twin
+- Add the following JSON structure to the Twin:
+
+```json
+"tags": {  
+  "name": "opcua_publisher"
+}
+```
+
+They'll be used later.
 
 ### Deploy an Azure VM which will act as the IoT Edge device
 
@@ -86,19 +111,15 @@ We can also use the command line and a deployment manifest to do the same.
 #### Prepare the Edge Device
 
 If there are already multiple IoT Edge devices registered in the IoT Hub, it is advised to first define a tag in the Device Twin of the Edge Device in IoT Hub.  We do not want to publish the deployment manifest to all devices in IoT Hub, instead, we only want to target one specific device in this PoC.
+That's why the `tags` have been added when creating the device identity.  We can use this tag to specify a condition in the IoT Edge deployment.
 
-- Navigate to the IoT Edge blade of your IoT Hub in the Azure Portal
-- Select the IoT Edge device that is used in this PoC which will host the OPC UA publisher
-- Open the Device Twin
-- Add a property `tags` to the JSON document, and specify a specific tag where we can filter on.
-  
-  ```json
-  "version": 3,
-    "tags": {
-        "opcua": true
-    },
-    "properties": {
-  ```
+If the `tags` haven't been added yet, this ones need to be added:
+
+```json
+"tags": {  
+  "name": "opcua_publisher"
+}
+```
 
 #### Deploy the IoT Edge manifest to IoT Hub
 
@@ -109,10 +130,11 @@ Execute this command to deploy the modules to the edge device:
 ```powershell
 $deploymentName = "opcua_$(Get-Date -Format yyyyMMdd)"
 
-az iot edge deployment create -d $deploymentName --content .\deployment.json -l "<iothubconnectionstring>" --target-condition "tags.opcua = true"
+az iot edge deployment create -d $deploymentName --content .\deployment.json -l "<iothubconnectionstring>" --target-condition "tags.name = 'opcua_publisher'"
 ```
 
 Note that the `target-condition` works on the `tags` property.  This makes sure that only devices that have this specific tag are targetted by the deployment.
+This is why the `name` tag was created in the Device Twin of the IoT Edge device.
 
 After a few moments, you'll see in IoT Hub that the deployment targets the device that has been registered and the deployment should be applied to that device.
 
@@ -129,6 +151,23 @@ You should see that IoT edge is running these modules:
 - OPCPublisher
 
 Now, the IoT Edge device is able to listen to OPC UA events.
+
+Important:  in IoT Hub a route has been declared which makes sure that messages that are sent by the OPCPublisher are routed to a specific EventHub.
+This route works via a message enrichment, and the message enrichment works based on an IoT Edge module tag.
+
+I haven't found a way to automatically create the tag on the OPCPublisher module during deployment, so you'll need to create it yourself:
+
+- Go to the Azure Portal and find the IoT Hub
+- open the IoT Edge blade
+- Selected the correct device
+- Select the OPCPublisher module and edit it's module twin
+- Add a tag to the JSON document:
+
+  ```json
+  "tags": {
+    "messagetype": "opcuametrics"
+  }
+  ```
 
 ## Setup a Mock which simulates an OPC UA server that exposes telemetry via OPC UA
 
@@ -222,6 +261,8 @@ To use the standardized OPC UA format, specify these commandline arguments:
 - `--mm=Samples`
 
 ### Setup a Timeseries Insights database
+
+This step is already performed by deploying the opcua_poc_resources ARM template.
 
 - Define a consumer-group on the IoT Hub or EventHub that receives the messages published by IoT Edge
 - Add a Timeseries Insights resource in Azure

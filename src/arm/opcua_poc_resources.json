@@ -1,0 +1,299 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "IotHub_Name": {
+      "type": "string",
+      "defaultValue": "bk-poc-telemetry-ingestion"
+    },
+    "IotHub_Sku_Name": {
+      "type": "string",
+      "defaultValue": "S1"
+    },
+    "IotHub_Sku_Capacity": {
+      "type": "string",
+      "defaultValue": "1"
+    },
+    "EventHub_Namespace_Name":{
+      "type":"string",
+      "defaultValue": "bk-poc-telemetrymessages-hub"
+    },
+    "EventHub_OpcUaTelemetry_Name": {
+      "type": "string",
+      "defaultValue": "opcuamessages"
+    },
+    "EventHub_Sku_Name": {
+      "type": "string",
+      "defaultValue": "Standard"
+    },
+    "TimeSeriesInsights_Name": {
+      "type": "string",
+      "defaultValue": "bk-poc-telemetry-insights"
+    },   
+    "TimeSeriesInsights_OpcuaEventSource_TimestampPropertyName": {
+      "type": "string",
+      "metadata": {
+        "description": "The event property that will be used as the event source's timestamp. If a value isn't specified for timestampPropertyName, or if null or empty-string is specified, the event creation time will be used."
+      },
+      "defaultValue": "Value.SourceTimestamp"
+    },
+    "TimeSeriesInsights_WarmStorage_Enabled": {
+      "type": "bool",
+      "defaultValue": true
+    },
+    "TimeSeriesInsights_WarmStorage_DataRetentionDays": {
+      "type": "int",
+      "minValue": 7,
+      "maxValue": 31,
+      "defaultValue": 7
+    },
+    "TimeSeriesInsights_StorageAccount_Name": {
+      "type": "string",
+      "defaultValue": "bkpoctelemetrystorage"
+    },
+    "TimeSeriesInsights_StorageAccount_Sku_Name": {
+      "type": "string",
+      "defaultValue": "Standard_LRS"
+    },
+    "Location_Short": {
+      "type": "string",
+      "defaultValue": "we"
+    },
+    "Location_Full": {
+      "type": "string",
+      "defaultValue": "West Europe"
+    }    
+  },
+  "variables": {        
+    "TimeSeries.Consumergroup.Name": "tsi-ingestion",        
+    "TimeSeriesInsights.OpcuaEventSource.Name": "opcuatelemetry",
+    "TimeSeriesInsights.WarmStorage.DataRetention": "[concat('P', parameters('TimeSeriesInsights_WarmStorage_DataRetentionDays'), 'D')]",    
+    "EventHub.Telemetry.ListenAccessKey.Name": "ListenOnly",
+    "EventHub.Telemetry.SendAccessKey.Name": "SendOnly",    
+    "Adx.Consumergroup.Name": "adx-ingestion"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Devices/IotHubs",
+      "apiVersion": "2021-03-31",
+      "name": "[parameters('IotHub_Name')]",
+      "location": "[parameters('Location_Full')]",
+      "sku": {
+        "name": "[parameters('IotHub_Sku_Name')]",
+        "capacity": "[parameters('IotHub_Sku_Capacity')]"
+      },
+      "properties": {
+        "eventHubEndpoints": {
+          "events": {
+            "retentionTimeInDays": 1,
+            "partitionCount": 2
+          }
+        },
+        "routing": {
+          "endpoints": {
+            "eventHubs": [
+              {
+                "connectionString": "[listkeys(resourceId('Microsoft.EventHub/namespaces/eventhubs/authorizationRules', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'), variables('EventHub.Telemetry.SendAccessKey.Name')),'2017-04-01').primaryConnectionString]",
+                "name": "opcuatelemetry"
+              }
+            ]       
+          },
+          "enrichments":[
+            {
+              "key": "messagetype",
+              "value": "$twin.tags.messagetype",
+              "endpointNames": [
+                "opcuatelemetry"
+              ]
+            }
+          ],
+          "routes": [
+            {
+              "name": "opcuatelemetryroute",
+              "source": "DeviceMessages",
+              "condition": "$twin.tags.messagetype='opcuametrics'",
+              "endpointNames": [
+                "opcuatelemetry"
+              ],
+              "isEnabled": true
+            }
+          ]
+        }
+      },
+      "tags": {        
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces', parameters('EventHub_Namespace_Name'))]",
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs/authorizationRules', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'), variables('EventHub.Telemetry.SendAccessKey.Name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.TimeSeriesInsights/environments",
+      "name": "[parameters('TimeSeriesInsights_Name')]",
+      "apiVersion": "2020-05-15",
+      "kind": "Gen2",
+      "location": "[parameters('Location_Full')]",
+      "sku": {
+        "name": "L1",
+        "capacity": 1
+      },
+      "properties": {
+        "timeSeriesIdProperties": [
+          {
+            "name": "ApplicationUri",
+            "type": "String"
+          },
+          {
+            "name": "NodeId",
+            "type": "String"
+          }
+        ],
+        "storageConfiguration": {
+          "accountName": "[parameters('TimeSeriesInsights_StorageAccount_Name')]",
+          "managementKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('TimeSeriesInsights_StorageAccount_Name')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value]"
+        },
+        "warmStoreConfiguration": "[if(parameters('TimeSeriesInsights_WarmStorage_Enabled'), json(concat('{\"dataRetention\": \"', variables('TimeSeriesInsights.WarmStorage.DataRetention'), '\"}')), json('null'))]"
+      },
+      "tags": {       
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('TimeSeriesInsights_StorageAccount_Name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.TimeSeriesInsights/environments/eventSources",
+      "apiVersion": "2020-05-15",
+      "name": "[concat(parameters('TimeSeriesInsights_Name'), '/', variables('TimeSeriesInsights.OpcuaEventSource.Name'))]",
+      "location": "[parameters('Location_Full')]",
+      "kind": "Microsoft.EventHub",
+      "properties": {
+        "eventHubName": "[parameters('EventHub_OpcUaTelemetry_Name')]",
+        "serviceBusNamespace": "[parameters('EventHub_Namespace_Name')]",
+        "keyName": "[variables('EventHub.Telemetry.ListenAccessKey.Name')]",
+        "consumerGroupName": "[variables('TimeSeries.Consumergroup.Name')]",
+        "eventSourceResourceId": "[resourceId(resourceGroup().name, 'Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]",
+        "sharedAccessKey": "[listkeys(resourceId(resourceGroup().name,'Microsoft.EventHub/namespaces/eventhubs/authorizationRules', parameters('EventHub_Namespace_Name'),parameters('EventHub_OpcUaTelemetry_Name'),variables('EventHub.Telemetry.ListenAccessKey.Name')),'2017-04-01').primaryKey]",
+        "timestampPropertyName": "[parameters('TimeSeriesInsights_OpcuaEventSource_TimestampPropertyName')]"
+      },
+      "dependson": [
+        "[resourceId('Microsoft.TimeSeriesInsights/environments', parameters('TimeSeriesInsights_Name'))]",
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]"
+      ],
+      "tags": {       
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2019-06-01",
+      "name": "[parameters('TimeSeriesInsights_StorageAccount_Name')]",
+      "location": "[parameters('Location_Full')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "[parameters('TimeSeriesInsights_StorageAccount_Sku_Name')]"
+      },
+      "scale": null,
+      "properties": {
+        "isHnsEnabled": true,
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "virtualNetworkRules": [],
+          "ipRules": [],
+          "defaultAction": "Allow"
+        },
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "services": {
+            "file": {
+              "enabled": true
+            },
+            "blob": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "accessTier": "Hot"
+      },
+      "tags": {
+      }
+    },
+    {
+      "name": "[parameters('EventHub_Namespace_Name')]",
+      "type": "Microsoft.EventHub/namespaces",
+      "apiVersion": "2017-04-01",
+      "location": "[parameters('Location_Full')]",
+      "tags": {       
+      },
+      "sku": {
+        "name": "[parameters('EventHub_Sku_Name')]"
+      },
+      "properties": {}
+    },
+    {
+      "name": "[concat(parameters('EventHub_Namespace_Name'), '/',parameters('EventHub_OpcUaTelemetry_Name'))]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs",
+      "apiVersion": "2017-04-01",
+      "properties": {
+        "messageRetentionInDays": 1,
+        "partitionCount": 2
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces', parameters('EventHub_Namespace_Name'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('EventHub_Namespace_Name'), '/', parameters('EventHub_OpcUaTelemetry_Name'),'/',variables('EventHub.Telemetry.ListenAccessKey.Name'))]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/authorizationRules",
+      "apiVersion": "2017-04-01",
+      "properties": {
+        "rights": [
+          "Listen"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('EventHub_Namespace_Name'), '/', parameters('EventHub_OpcUaTelemetry_Name'),'/',variables('EventHub.Telemetry.SendAccessKey.Name'))]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/authorizationRules",
+      "apiVersion": "2017-04-01",
+      "properties": {
+        "rights": [
+          "Send"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('EventHub_Namespace_Name'), '/',parameters('EventHub_OpcUaTelemetry_Name'),'/',variables('TimeSeries.Consumergroup.Name'))]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+      "apiVersion": "2017-04-01",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('EventHub_Namespace_Name'), '/',parameters('EventHub_OpcUaTelemetry_Name'),'/',variables('Adx.Consumergroup.Name'))]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+      "apiVersion": "2017-04-01",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]"
+      ]
+    }    
+  ],
+  "outputs": {
+    "TimeSeriesInsights_Name": {
+      "type": "string",
+      "value": "[parameters('TimeSeriesInsights_Name')]"
+    },
+    "TimeSeriesInsights.EnvironmentFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.TimeSeriesInsights/environments', parameters('TimeSeriesInsights_Name'))).dataAccessFQDN]"
+    }    
+  }
+}
