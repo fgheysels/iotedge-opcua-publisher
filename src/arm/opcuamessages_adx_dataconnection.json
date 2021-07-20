@@ -1,0 +1,108 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "EventHub_ResourceGroup_Name": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the resourcegroup that contains the source EventHub"
+            }
+        },
+        "EventHub_Namespace_Name": {
+            "type": "string",
+            "defaultValue": "bk-poc-telemetrymessages-hub",
+            "metadata": {
+                "description": "Specifies the Event Hub Namespace name."
+            }
+        },
+        "EventHub_OpcUaTelemetry_Name": {
+            "type": "string",
+            "defaultValue": "opcuamessages",
+            "metadata": {
+                "description": "Specifies the Event Hub name."
+            }
+        },
+        "EventHub_ConsumerGroup_Name": {
+            "type": "string",
+            "defaultValue": "adx-ingestion",
+            "metadata": {
+                "description": "Specifies the consumer group of the Event Hub that must be used for ingesting into ADX."
+            }
+        },
+        "Adx_Cluster_Name": {
+            "type": "string",
+            "defaultValue": "bkiotdevadx01",
+            "metadata": {
+                "description": "Specifies the name of the cluster"
+            }
+        },
+        "Adx_Database_Name": {
+            "type": "string",
+            "defaultValue": "datakapcore",
+            "metadata": {
+                "description": "Specifies the name of the database"
+            }
+        },
+        "Adx_Table_Name": {
+            "type": "string",
+            "defaultValue": "OpcUaMetrics",
+            "metadata": {
+                "description": "Specifies the name of the table"
+            }
+        },
+        "Adx_Mapping_Name": {
+            "type": "string",
+            "defaultValue": "OpcUaMapping",
+            "metadata": {
+                "description": "Specifies the name of the mapping rule"
+            }
+        },
+        "Adx_DataConnection_Name": {
+            "type": "string",
+            "defaultValue": "OpcUaConnection",
+            "metadata": {
+                "description": "Name of the data connection to create"
+            }
+        },
+        "subscriptionId": {
+            "type": "string",
+            "defaultValue": "[subscription().subscriptionId]",
+            "metadata": {
+                "description": "Specifies the subscriptionId of the resources"
+            }
+        },
+        "resourceGroup": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().name]",
+            "metadata": {
+                "description": "Specifies the resourceGroup of the resources"
+            }
+        },
+        "Location_Full": {
+            "type": "string",
+            "defaultValue": "West Europe",
+            "metadata": {
+                "description": "Location for all resources."
+            }
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Kusto/Clusters/Databases/DataConnections",
+            "apiVersion": "2019-09-07",
+            "name": "[concat(parameters('Adx_Cluster_Name'), '/', parameters('Adx_Database_Name'), '/', parameters('Adx_DataConnection_Name'))]",
+            "location": "[parameters('Location_Full')]",
+            "kind": "EventHub",
+            "properties": {
+                "eventHubResourceId": "[resourceId(parameters('EventHub_ResourceGroup_Name'), 'Microsoft.EventHub/namespaces/eventhubs', parameters('EventHub_Namespace_Name'), parameters('EventHub_OpcUaTelemetry_Name'))]",
+                "consumerGroup": "[parameters('EventHub_ConsumerGroup_Name')]",
+                "tableName": "[parameters('Adx_Table_Name')]",
+                "mappingRuleName": "[parameters('Adx_Mapping_Name')]",
+                "dataFormat": "MULTIJSON",
+                "eventSystemProperties": [],
+                "compression": "None"
+            }
+        }
+    ]
+}

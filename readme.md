@@ -260,13 +260,13 @@ To use the standardized OPC UA format, specify these commandline arguments:
 - `--me=Json`
 - `--mm=Samples`
 
-### Setup a Timeseries Insights database
+### Ingest telemetry into TimeSeries Insights
 
-This step is already performed by deploying the opcua_poc_resources ARM template.
+This step is already performed by deploying the opcua_poc_resources ARM template.  The information below describes what the ARM template does to get the telemetry into Timeseries Insights.
 
 - Define a consumer-group on the IoT Hub or EventHub that receives the messages published by IoT Edge
 - Add a Timeseries Insights resource in Azure
-- Specify `NodeId` as the property-name for the Timeseries ID.  `NodeId` is the name of the property in the messages sent by OPCPublisher that identifies a metric:
+- Specify `ApplicationUri` `NodeId` as the property-name for the Timeseries ID.  `NodeId` is the name of the property in the messages sent by OPCPublisher that identifies a metric:
 
   ```json
   [
@@ -293,3 +293,77 @@ After a few moments, data should be flowing in in Timeseries Insights.
 Navigate to `https://insights.timeseries.azure.com`, and visualize the data:
 
 ![TSI graph](./media/tsi_data.png)
+
+### Ingest telemetry into Azure Data Explorer
+
+The data that is received by the OPCPublisher IoT Edge module is routed to the `opcuamessages` eventhub.  To get the information that is ingested in that EventHub into Azure Data Explorer, the following tasks need to be executed:
+
+- Create a table in ADX which will hold the information
+- Define a mapping that defines how the JSON document that is received on EventHub must be translated to the ADX table
+- Create a data connection from ADX to the EventHub
+
+#### Create a table in ADX for storing OPC UA telemetry
+
+The statement below creates the table that can be used in ADX to store the information:
+
+```kql
+.create table OpcUaMetrics (Timestamp: datetime, ApplicationUri: string, NodeId: string, Value: dynamic)
+```
+
+> Note: the Value column has been created as dynamic
+
+#### Define ADX mapping
+
+Since the JSON document has this structure:
+
+```json
+[
+    {
+        "NodeId": "http://microsoft.com/Opc/OpcPlc/#s=DipData",
+        "ApplicationUri": "urn:OpcPlc:aci-bekaert-hodafep-plc1",
+        "Value": {
+            "Value": 68.45471059286888,
+            "SourceTimestamp": "2021-07-20T15:44:07.4294326Z"
+        }
+    }
+]
+```
+
+The mapping definition looks like this:
+
+```kql
+.create table OpcUaMetrics ingestion json mapping 'OpcUaMapping' '[{"column":"Timestamp", "Properties": {"Path": "$.Value.SourceTimestamp"}},{"column":"ApplicationUri", "Properties": {"Path":"$.ApplicationUri"}}, {"column":"NodeId", "Properties": {"Path":"$.NodeId"}}, {"column":"Value", "Properties": {"Path":"$.Value.Value"}}]'
+```
+
+> Note: ADX table column names are case-sensitive!
+
+#### Create a data connection to the EventHub
+
+Creating a data connection in ADX can be done via the Azure Portal, as is described [here](https://docs.microsoft.com/en-us/azure/data-explorer/ingest-data-event-hub#create-a-data-connection), but it can also be done via an ARM template.
+
+The `.\src\arm\opcuamessages_adx_dataconnection` ARM template creates this data connection.
+
+Deploy the ARM template by executing this command:
+
+```powershell
+az deployment group create --resource-group <resourcegroup-name that contains ADX> --template-file opcuamessages_adx_dataconnection.json --parameters EventHub_ResourceGroup_Name='<resourcegroup-name that contains eventhub>'
+```
+
+> Note: the `EventHub_ResourceGroup_Name` must be specified, as this is the only parameter which has not been given a default value
+
+#### Optional: enable streaming ingestion
+
+By default, ADX ingests data from EventHub using batching.  This is a more performant way to ingest data, but the drawback is that it takes some time before data is present in ADX.
+To have less latency during ingestion, streaming ingestion can be enabled.  This is done by executing this ADX command:
+
+```kql
+.alter table OpcUaMetrics policy streamingingestion enable  
+```
+
+If data is not being added to the target table, execute the following command to get some insights:
+
+```kql
+.show ingestion failures
+```
+
+> Note: when ingesting JSON data, use `MULTIJSON` as dataformat when Json records are not put per line.  See [this](https://docs.microsoft.com/en-us/azure/data-explorer/ingest-json-formats?tabs=kusto-query-language#the-json-format) article for more information.
