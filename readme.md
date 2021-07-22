@@ -6,6 +6,12 @@ This document provides a step-by-step approach for deploying the [OPC UA publish
 
 ## Deploy the required Azure Resources
 
+To be able to complete this PoC, we need some Azure Resources:
+
+- IoT Hub (used to manage the IoT Edge device and ingest telemetry)
+- EventHub (IoT Hub will route data to an EventHub)
+- Timeseries Insights
+
 Deploy the ARM template that is found in .\src\arm
 
 This can be done via the Azure Portal (Deploy a custom Template) or via the following command:
@@ -296,6 +302,8 @@ Navigate to `https://insights.timeseries.azure.com`, and visualize the data:
 
 ### Ingest telemetry into Azure Data Explorer
 
+> For this step, it is assumed that an Azure Data Explorer cluster is already available.
+
 The data that is received by the OPCPublisher IoT Edge module is routed to the `opcuamessages` eventhub.  To get the information that is ingested in that EventHub into Azure Data Explorer, the following tasks need to be executed:
 
 - Create a table in ADX which will hold the information
@@ -351,6 +359,8 @@ az deployment group create --resource-group <resourcegroup-name that contains AD
 
 > Note: the `EventHub_ResourceGroup_Name` must be specified, as this is the only parameter which has not been given a default value
 
+> Note: when ingesting JSON data, use `MULTIJSON` as dataformat when Json records are not put per line.  See [this](https://docs.microsoft.com/en-us/azure/data-explorer/ingest-json-formats?tabs=kusto-query-language#the-json-format) article for more information.
+
 #### Optional: enable streaming ingestion
 
 By default, ADX ingests data from EventHub using batching.  This is a more performant way to ingest data, but the drawback is that it takes some time before data is present in ADX.
@@ -365,5 +375,3 @@ If data is not being added to the target table, execute the following command to
 ```kql
 .show ingestion failures
 ```
-
-> Note: when ingesting JSON data, use `MULTIJSON` as dataformat when Json records are not put per line.  See [this](https://docs.microsoft.com/en-us/azure/data-explorer/ingest-json-formats?tabs=kusto-query-language#the-json-format) article for more information.
