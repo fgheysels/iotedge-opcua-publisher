@@ -12,7 +12,7 @@ To be able to complete this PoC, we need some Azure Resources:
 - EventHub (IoT Hub will route data to an EventHub)
 - Timeseries Insights
 
-Deploy the ARM template that is found in .\src\arm
+Deploy the ARM template that is found in `.\src\arm`.  This ARM template will deploy the required resources.
 
 This can be done via the Azure Portal (Deploy a custom Template) or via the following command:
 
@@ -24,13 +24,15 @@ az deployment group create --resource-group <resource-group-name> --template-fil
 
 ### Register a new IoT Edge device in IoT Hub
 
-This can be done via the Azure Portal, or via the commandline, by executing this CLI command:
+This can be done via the Azure Portal or via the commandline, by executing this CLI command:
 
 ```azcli
 az iot hub device-identity create --device-id <my_device_id> --edge-enabled --hub-name <iothubname>
 ```
 
-When the device has been created, edit the Device Twin and add these tags:
+When the device has been created, a tag must be added to the DeviceTwin, to make sure that we can target this specific device when deploying the OPCUA module.
+
+To edit the Device Twin and add the tag, follow these steps:
 
 - Navigate to the IoT Edge blade of your IoT Hub in the Azure Portal
 - Select the IoT Edge device that is used in this PoC which will host the OPC UA publisher
@@ -43,11 +45,11 @@ When the device has been created, edit the Device Twin and add these tags:
 }
 ```
 
-They'll be used later.
+This tag will be used in a later step to target this specific device when deploying an IoT Edge deployment manifest.
 
 ### Deploy an Azure VM which will act as the IoT Edge device
 
-For this PoC, an Azure VM will be used which hosts the IoT Edge runtime.
+For this PoC, an Azure VM will be used which hosts the IoT Edge runtime and will thus act as an IoT Edge device.
 We'll provision the VM and make sure that we can logon to it via ssh.
 
 #### Generate SSH keys
@@ -158,22 +160,19 @@ You should see that IoT edge is running these modules:
 
 Now, the IoT Edge device is able to listen to OPC UA events.
 
-Important:  in IoT Hub a route has been declared which makes sure that messages that are sent by the OPCPublisher are routed to a specific EventHub.
-This route works via a message enrichment, and the message enrichment works based on an IoT Edge module tag.
+**Important:**  in IoT Hub a route has been declared which makes sure that messages that are sent by the OPCPublisher are routed to a specific EventHub.  To make sure that the routing works, follow the steps below:
+ - Go to the Azure Portal and find the IoT Hub
+ - open the IoT Edge blade
+ - Selected the correct device
+ - Select the OPCPublisher module and edit it's module twin
+ - Add a tag to the JSON document:
+   ```json
+   "tags": {
+     "messagetype": "opcuametrics"
+   }
+   ```
 
-I haven't found a way to automatically create the tag on the OPCPublisher module during deployment, so you'll need to create it yourself:
-
-- Go to the Azure Portal and find the IoT Hub
-- open the IoT Edge blade
-- Selected the correct device
-- Select the OPCPublisher module and edit it's module twin
-- Add a tag to the JSON document:
-
-  ```json
-  "tags": {
-    "messagetype": "opcuametrics"
-  }
-  ```
+> Ideally, the tag is automatically added to the Module Twin during deployment, but it looks like this is not supported via the deployment manifest.  I've submitted an [idea](https://feedback.azure.com/forums/907045-azure-iot-edge/suggestions/43822491-specify-tags-in-deployment-manifest) on uservoice.
 
 ## Setup a Mock which simulates an OPC UA server that exposes telemetry via OPC UA
 
