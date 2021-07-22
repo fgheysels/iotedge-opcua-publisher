@@ -1,8 +1,8 @@
-# Deploy IoT Edge OPC UA Publisher module to IoT Edge device (PoC)
+# POC: Ingest OPC UA metrics via the IoT Edge OPC UA Publisher module
 
 ## Abstract
 
-This document provides a step-by-step approach for deploying the [OPC UA publisher IoT Edge module](https://github.com/Azure/iot-edge-opc-publisher) on an IoT Edge device.
+This document provides a step-by-step approach for deploying the [OPC UA publisher IoT Edge module](https://github.com/Azure/iot-edge-opc-publisher) on an IoT Edge device and getting the telemetry in Azure Timeseries Insights and Azure Data Explorer.
 
 ## Deploy the required Azure Resources
 
@@ -12,7 +12,7 @@ To be able to complete this PoC, we need some Azure Resources:
 - EventHub (IoT Hub will route data to an EventHub)
 - Timeseries Insights
 
-Deploy the ARM template that is found in `.\src\arm`.  This ARM template will deploy the required resources.
+Deploy the `opcua_poc_resources.json` ARM template that is found in `.\src\arm`.  This ARM template will deploy the required resources.
 
 This can be done via the Azure Portal (Deploy a custom Template) or via the following command:
 
@@ -114,7 +114,7 @@ iotedge list
 
 [This documentation page](https://github.com/Azure/iot-edge-opc-publisher) on GitHub describes how the OPC UA publisher module can be deployed on an IoT Edge device.
 
-We can also use the command line and a deployment manifest to do the same.
+We can also use a deployment manifest to deploy the required modules to the IoT Edge device.
 
 #### Prepare the Edge Device
 
@@ -177,7 +177,7 @@ Now, the IoT Edge device is able to listen to OPC UA events.
 ## Setup a Mock which simulates an OPC UA server that exposes telemetry via OPC UA
 
 There exists a GitHub repository which contains a OPC UA Server simulator.  It can be found [here](https://github.com/Azure-Samples/iot-edge-opc-plc).
-Deploying it is just a matter of clicking the 'Deploy to Azure' button.
+Deploying it is just a matter of clicking the 'Deploy to Azure' button.  By doing this, an Azure Container Instance will be created which runs the OPC UA Server Simulator.
 
 ## Connect the OPC UA Publisher module to the OPC UA Server Simulator
 
@@ -211,7 +211,7 @@ The `publishednodes.json` should look like this:
 ```json
 [
   {
-    "EndpointUrl": "opc.tcp://aci-contoso-g4mwza6-plc1.westeurope.azurecontainer.io:50000",
+    "EndpointUrl": "opc.tcp://<redacted>.westeurope.azurecontainer.io:50000",
     "UseSecurity": false,
     "OpcNodes": [
       { "Id": "ns=2;s=AlternatingBoolean" },
