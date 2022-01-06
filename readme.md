@@ -184,7 +184,7 @@ Deploying it is just a matter of clicking the 'Deploy to Azure' button.  By doin
 The OPCPublisher module is currently not receiving any data since it is not configured yet.
 Moreover, if the command `iotedge logs OPCPublisher` is executed, you can see that the module is not functioning correctly:  there is no configuration file available.
 
-The `containerCreate` options of the OPCPublisher module state:
+The `createOptions` of the OPCPublisher module state:
 
 ```json
 {
