@@ -230,6 +230,38 @@ The `publishednodes.json` should look like this:
 The `EndpointUrl` can be found in the logs of the OPC UA Server Simulator that is running in the Azure Container Instance that has been deployed.
 Actually, the complete JSON of how this file should look like, can be found in the logs of the OPC UA Server Simulator.
 
+### Certificates
+
+The OPCUA Publisher module uses certificates to establish a connection with the OPC endpoint.
+By default, the OPCUA Publisher module generates a certificate that is valid for 1 year.  The certificate is stored inside the container, which means that, if the container restarts, the certificate is lost and a new one needs to be generated.
+
+To prevent this from happening, the certificate should be stored outside the container.  The certificate can be stored on the host's filesystem by specifying an additional volume bind.
+The OPCUA Publisher module stores the certificates in the directory `/app/pki`.  When this directory is bound to a directory on the host's filesystem, the certificates will be stored outside of the container.
+This can be easily done by specifying an additional bind in the `createOptions` of the OPCUA Publisher module.  This is done in the deployment template:
+
+```json
+"modules": {
+  "opcpublisher": {
+  "version": "1.0",
+  "type": "docker",
+  "status": "running",
+  "restartPolicy": "always",
+  "settings": {
+    "image": "mcr.microsoft.com/iotedge/opc-publisher:latest",
+    "createOptions": {
+      "HostConfig": {
+        "Binds": [
+          "/etc/mydir:/appdata",   // bind for appdata, contains f.i. the 'publishednodes.json' file
+          "/var/lib/mydir/certs:/app/pki" // Bind for the certificates
+        ]
+    }
+  ...
+```
+
+#### Use your own certificate
+
+Interesting articles on how to configure OPCUA Publisher to use your own certificates can be found [here](https://vslepakov.medium.com/custom-x509-certificates-with-opc-publisher-73a0127bf884) and [here](https://kevinsaye.wordpress.com/2021/02/24/using-custom-x509-certificates-in-iot-edges-opc-publisher/).
+
 ### Verification
 
 Once the configuration file is created, check if everything is working as expected.
